@@ -34,7 +34,14 @@ def _ffmpeg_path() -> str:
     """ffmpeg 可执行文件路径：优先环境变量 FFMPEG_PATH，否则用系统 PATH 中的 ffmpeg。
     服务器部署时建议设 FFMPEG_PATH（如 C:\ffmpeg\bin\ffmpeg.exe）。"""
     p = os.environ.get("FFMPEG_PATH", "").strip()
-    return p or "ffmpeg"
+    if p:
+        return p
+    # 自动探测常见安装位置（服务器部署友好）
+    for cand in (r"E:\FormatFactory\ffmpeg.exe", r"C:\ffmpeg\bin\ffmpeg.exe",
+                  r"C:\tools\ffmpeg\bin\ffmpeg.exe", r"D:\ffmpeg\bin\ffmpeg.exe"):
+        if os.path.exists(cand):
+            return cand
+    return "ffmpeg"
 
 def extract_audio(video_path: str, wav_path: str) -> None:
     """ffmpeg 抽取音轨 → 16kHz 单声道 wav。"""
