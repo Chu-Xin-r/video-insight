@@ -69,7 +69,7 @@ export default function Home({ onOpenTask }: Props) {
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.6, ease: EASE }}
-        className='text-center pt-6 pb-14'
+        className='text-center pt-4 pb-10'
       >
         <motion.p
           initial={{ opacity: 0, y: 12 }}
@@ -98,7 +98,7 @@ export default function Home({ onOpenTask }: Props) {
       <UploadZone providers={providers} onUploaded={() => { flash('ok', '已提交，正在后台解析'); refresh(); }} onError={(m) => flash('err', m)} />
 
       {/* 记录列表 */}
-      <section className='pt-20 md:pt-24'>
+      <section className='pt-14 md:hidden'>
         <motion.div
           initial={{ opacity: 0, y: 14 }}
           animate={{ opacity: 1, y: 0 }}

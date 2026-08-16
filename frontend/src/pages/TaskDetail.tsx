@@ -11,6 +11,7 @@ export default function TaskDetail({ taskId, onBack }: Props) {
   const [task, setTask] = useState<Task | null>(null);
   const [showTranscript, setShowTranscript] = useState(false);
   const [imgErr, setImgErr] = useState<Record<number, boolean>>({});
+  const [lightbox, setLightbox] = useState<number | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -23,7 +24,9 @@ export default function TaskDetail({ taskId, onBack }: Props) {
       } catch { /* ignore */ }
     };
     poll();
-    return () => { alive = false; };
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setLightbox(null); };
+    window.addEventListener('keydown', onKey);
+    return () => { alive = false; window.removeEventListener('keydown', onKey); };
   }, [taskId]);
 
   if (!task) {
@@ -182,7 +185,7 @@ export default function TaskDetail({ taskId, onBack }: Props) {
                         src={api.taskFile(taskId, f.image)}
                         alt={'关键画面 ' + fmtTime(f.time)}
                         loading='lazy'
-                        className='w-full aspect-video object-cover transition-transform duration-500 ease-[cubic-bezier(0.4,0,0.2,1)] hover:scale-[1.02]'
+                        className='w-full aspect-video object-cover cursor-zoom-in transition-transform duration-500 ease-[cubic-bezier(0.4,0,0.2,1)] hover:scale-[1.02]' onClick={() => setLightbox(i)}
                         onError={() => setImgErr((p) => ({ ...p, [i]: true }))}
                       />
                     ) : (
@@ -236,6 +239,57 @@ export default function TaskDetail({ taskId, onBack }: Props) {
           )}
         </motion.div>
       )}
-    </div>
+  
+      {/* 图片灯箱 */}
+      <AnimatePresence>
+        {lightbox !== null && r.frames[lightbox] && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.3, ease: EASE }}
+            className='fixed inset-0 z-50 bg-[rgba(28,24,20,0.82)] backdrop-blur-md flex items-center justify-center p-4 md:p-10'
+            onClick={() => setLightbox(null)}
+          >
+            <button
+              onClick={(e) => { e.stopPropagation(); setLightbox(null); }}
+              className='absolute top-5 right-5 w-11 h-11 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-all duration-300'
+              aria-label='关闭'
+            ><CloseIcon size={20} /></button>
+            {lightbox > 0 && (
+              <button
+                onClick={(e) => { e.stopPropagation(); setLightbox(lightbox - 1); }}
+                className='absolute left-3 md:left-8 top-1/2 -translate-y-1/2 w-11 h-11 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-all duration-300'
+                aria-label='上一张'
+              ><ChevronDownIcon size={20} className='rotate-90' /></button>
+            )}
+            {lightbox < r.frames.length - 1 && (
+              <button
+                onClick={(e) => { e.stopPropagation(); setLightbox(lightbox + 1); }}
+                className='absolute right-3 md:right-8 top-1/2 -translate-y-1/2 w-11 h-11 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-all duration-300'
+                aria-label='下一张'
+              ><ChevronDownIcon size={20} className='-rotate-90' /></button>
+            )}
+            <motion.figure
+              initial={{ scale: 0.92, y: 12 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.94, y: 8, opacity: 0 }}
+              transition={{ duration: 0.35, ease: EASE }}
+              className='max-w-full'
+              onClick={(e) => e.stopPropagation()}
+            >
+              <img
+                src={api.taskFile(taskId, r.frames[lightbox].image)}
+                alt={'关键画面 ' + fmtTime(r.frames[lightbox].time)}
+                className='max-w-[88vw] max-h-[76vh] rounded-[14px] shadow-2xl object-contain bg-[#141210]'
+              />
+              <figcaption className='mt-4 text-center space-y-1'>
+                <span className='badge-oat inline-flex'><ClockIcon size={11} /> {fmtTime(r.frames[lightbox].time)} · {(lightbox + 1)}/{r.frames.length}</span>
+                <p className='text-[13.5px] text-[#E8E2D9] max-w-2xl mx-auto leading-relaxed'>{r.frames[lightbox].context || r.frames[lightbox].description}</p>
+              </figcaption>
+            </motion.figure>
+          </motion.div>
+        )}
+      </AnimatePresence>  </div>
   );
 }

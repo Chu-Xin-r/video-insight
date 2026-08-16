@@ -46,31 +46,34 @@ def summarize(provider_id: str, transcript: str, style: str = "detailed",
     }.get(style, "详细笔记，覆盖全部要点，分章节展开")
 
     prompt = f"""
-你是一个专业的视频内容分析师。下面是一段视频的语音转写稿（带时间戳），
-请分析它讲了什么，输出严格的 JSON（不要输出任何其他文字）：
+你是一名专业的课程笔记整理助手。用户正在通过视频学习这门课程，
+需要一份能当笔记用的分析。下面是视频语音转写稿（带时间戳），
+请分析讲师讲了哪些知识点，输出严格的 JSON（不要输出任何其他文字）：
 
 {{
-  "title": "不超过 20 字的标题",
-  "summary": "全文摘要（{style_desc}）",
+  "title": "不超过 20 字的课程主题标题",
+  "summary": "全文摘要（{style_desc}），以「这节课学了什么」为主线组织",
   "chapters": [
     {{
-      "title": "章节标题",
-      "start": 起始秒数(数字),
-      "end": 结束秒数(数字),
-      "points": ["要点1", "要点2"]
+      "title": "知识点名称（教学术语，一句话概括，如：极限的唯一性）",
+      "start": 讲师开始讲解该知识点的秒数(数字),
+      "end": 讲解结束的秒数(数字),
+      "points": ["讲解要点/结论", "关键例子或推导", "易错点"]
     }}
   ],
   "keywords": ["关键词1", "关键词2"]
 }}
 
 要求：
-- chapters 按时间顺序覆盖整个视频，start/end 取转写时间戳中最接近的整数秒
-- 每个章节 2~6 个要点，用一句话概括
-- keywords 5~10 个
+- 核心任务：识别「讲师开始讲解一个新知识点」的时刻作为章节起点；不要把视频按时间等分
+- 每个知识点一个章节，按时间顺序排列；标题用知识点本身的教学术语
+- points 提炼「讲了什么、结论是什么、有没有例题/推导」2~6 条
+- keywords 5~10 个，用本学科的术语
 - 语言使用中文
 
 转写稿如下：
 """
+
     if len(transcript) > 150000:
         transcript = transcript[:150000] + "……（过长截断）"
 
@@ -82,25 +85,64 @@ def summarize(provider_id: str, transcript: str, style: str = "detailed",
 
 
 def find_keypoints(provider_id: str, transcript: str, segments: list) -> list:
-    """从文字稿里找出适合截图的"关键点"（含时间戳）。"""
-    import re
-    hints = re.findall(r"(?:如图|大家看|接下来|注意|重点|这里|这个图|这个表|演示|操作|代码|屏幕|画面)", transcript)
-    selected = []
-    step = max(1, len(segments) // 12) if segments else 1
-    for i in range(0, len(segments), step):
-        seg = segments[i]
-        t = seg["text"]
-        if any(k in t for k in ("如图", "大家看", "接下来", "注意", "重点", "这里", "这个图", "这个表", "演示", "操作", "代码", "屏幕", "画面")) or i % (step * 3) == 0:
-            selected.append({
-                "time": seg["start"],
-                "reason": t[:40],
-            })
-        if len(selected) >= 15:
-            break
-    if not selected and segments:
-        selected = [{"time": s["start"], "reason": s["text"][:40]} for s in segments[:: max(1, len(segments) // 8)]][:10]
-    return selected
+    """找出「讲师讲解知识点 / 展示板书 PPT / 公式 / 例题」的关键时刻（供抽帧识别）。
 
+    优先让 LLM 基于语义判断知识点讲解时刻（比正则准确），失败时回退正则。
+    """
+    if not segments:
+        return []
+    # 抽样控制 token
+    step = max(1, len(segments) // 220)
+    sample = segments[::step]
+    lines = [f"[{int(s['start'])}s] {s['text'].strip()[:60]}" for s in sample]
+    body = chr(10).join(lines)
+    if len(body) > 22000:
+        body = body[:22000] + '……'
+
+    prompt = (
+        '你是视频画面抓取助手。用户在通过视频课程学习，需要在「讲师正在讲解重要知识点、'
+        '并展示板书 / PPT / 图表 / 公式推导 / 代码 / 例题」的时刻截取画面，交给多模态模型识别。'
+        '下面是带时间戳的文字稿片段（抽样），请选出最适合截图的 4~8 个时刻：'
+        '- 时刻必须是下面列表中存在的秒数'
+        '- 优先选：开始讲新知识点、展示关键公式/图表/例题、做推导或演示'
+        '- 避免：寒暄、重复、与知识点无关的内容'
+        '输出严格 JSON：{"keypoints": [{"time": 秒数, "reason": "为什么选这里(20字内)"}]}'
+        + chr(10)
+        + body
+    )
+    try:
+        raw = _chat(provider_id, [
+            {'role': 'system', 'content': '你只输出合法 JSON，不输出其他内容。'},
+            {'role': 'user', 'content': prompt},
+        ], temperature=0.2)
+        data = _parse_json(raw)
+        kps = data.get('keypoints', []) if isinstance(data, dict) else []
+        times = {int(s['start']) for s in sample}
+        result = []
+        for k in kps:
+            t = int(k.get('time', 0) or 0)
+            if t in times and len(result) < 10:
+                result.append({'time': t, 'reason': str(k.get('reason', ''))[:40]})
+        if result:
+            return result
+    except Exception:
+        pass
+    # 回退：正则启发
+    import re
+    kws = ('如图', '大家看', '注意', '重点', '这个图', '这个表', '演示', '代码',
+           '例题', '定义', '定理', '性质', '公式', '推导', '证明', '接下来', '结论')
+    selected = []
+    n = max(1, len(sample) // 10)
+    for i in range(0, len(sample), n):
+        seg = sample[i]
+        t = seg['text']
+        if any(k in t for k in kws) or i % max(1, len(sample) // 3) == 0:
+            selected.append({'time': seg['start'], 'reason': t[:40]})
+        if len(selected) >= 10:
+            break
+    if selected:
+        return selected
+    return [{'time': s['start'], 'reason': s['text'][:40]} for s in sample[:: max(1, len(sample) // 6)]][:8]
 
 def describe_frame(provider_id: str, image_path: str | Path, context: str) -> str:
     """多模态：让视觉模型描述一帧画面（PPT/图表/代码/字幕等）。"""
