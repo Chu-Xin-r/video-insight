@@ -48,7 +48,7 @@ def _dsh_key(env_name: str) -> str:
 def _load_custom() -> dict[str, dict[str, Any]]:
     if CONFIG_FILE.exists():
         try:
-            return json.loads(CONFIG_FILE.read_text(encoding="utf-8"))
+            return json.loads(CONFIG_FILE.read_text(encoding="utf-8-sig"))
         except Exception:
             return {}
     return {}
