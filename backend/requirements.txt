@@ -3,5 +3,6 @@ uvicorn[standard]>=0.30
 python-multipart>=0.0.9
 faster-whisper>=1.0
 ctranslate2==4.4.0  # Server 2022 hang fix
+onnxruntime==1.18.1  # Server 2022 DLL init failure with 1.28.x
 openai>=1.40
 pydantic>=2.7
