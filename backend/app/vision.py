@@ -5,6 +5,7 @@ import subprocess
 from pathlib import Path
 
 from .llm import describe_frame
+from .transcribe import _ffmpeg_path
 
 
 def extract_frame(video_path: str, t: float, out_path: str | Path) -> Path | None:
@@ -12,7 +13,7 @@ def extract_frame(video_path: str, t: float, out_path: str | Path) -> Path | Non
     out = Path(out_path)
     out.parent.mkdir(parents=True, exist_ok=True)
     cmd = [
-        "ffmpeg", "-y", "-ss", f"{max(0.0, t):.2f}", "-i", video_path,
+        _ffmpeg_path(), "-y", "-ss", f"{max(0.0, t):.2f}", "-i", video_path,
         "-frames:v", "1", "-q:v", "2", str(out),
     ]
     try:
