@@ -3,7 +3,7 @@ import { motion } from 'framer-motion';
 import Home from './pages/Home';
 import TaskDetail from './pages/TaskDetail';
 import Settings from './pages/Settings';
-import { SettingsIcon, FilmIcon } from './components/Icons';
+import { SettingsIcon, FilmIcon, TrashIcon } from './components/Icons';
 import { api, Task } from './lib/api';
 
 type View = 'home' | 'detail' | 'settings';
@@ -35,6 +35,15 @@ export default function App() {
   }, []);
 
   const openTask = (id: string) => { setTaskId(id); setView('detail'); };
+
+  const doDelete = async (id: string) => {
+    if (!window.confirm('确定删除这条分析记录吗？视频副本与关键帧将一并清理。')) return;
+    try {
+      await api.deleteTask(id);
+      setTasks((ts) => ts.filter((t) => t.id !== id));
+      if (taskId === id) setView('home');
+    } catch { /* ignore */ }
+  };
 
   const navCls = (active: boolean) =>
     'w-full px-4 py-2.5 rounded-[12px] text-sm font-medium transition-all duration-300 flex items-center gap-2.5 ' +
@@ -105,7 +114,14 @@ export default function App() {
                     {t.status === 'pending' && <span className='text-[#B8A089]'>排队</span>}
                   </span>
                 </div>
-                <p className='text-[13px] font-medium text-[#2C2C2C] truncate'>{t.filename}</p>
+                <div className='flex items-center justify-between gap-1'>
+                  <p className='text-[13px] font-medium text-[#2C2C2C] truncate'>{t.filename}</p>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); doDelete(t.id); }}
+                    title='删除记录'
+                    className='opacity-0 group-hover:opacity-100 p-1.5 rounded-[8px] text-[#C8B8A8] hover:text-[#A85B4E] hover:bg-[rgba(180,90,80,0.08)] transition-all duration-300 shrink-0'
+                  ><TrashIcon size={14} /></button>
+                </div>
                 {t.status === 'done' && t.result?.summary && (
                   <p className='text-[12px] text-[#C4785A] truncate mt-0.5'>{t.result.summary.title}</p>
                 )}
