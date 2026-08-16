@@ -30,11 +30,17 @@ def _add_nvidia_libs_to_path() -> None:
 _add_nvidia_libs_to_path()
 
 
+def _ffmpeg_path() -> str:
+    """ffmpeg 可执行文件路径：优先环境变量 FFMPEG_PATH，否则用系统 PATH 中的 ffmpeg。
+    服务器部署时建议设 FFMPEG_PATH（如 C:\ffmpeg\bin\ffmpeg.exe）。"""
+    p = os.environ.get("FFMPEG_PATH", "").strip()
+    return p or "ffmpeg"
+
 def extract_audio(video_path: str, wav_path: str) -> None:
     """ffmpeg 抽取音轨 → 16kHz 单声道 wav。"""
     Path(wav_path).parent.mkdir(parents=True, exist_ok=True)
     cmd = [
-        "ffmpeg", "-y", "-i", video_path,
+        _ffmpeg_path(), "-y", "-i", video_path,
         "-ar", "16000", "-ac", "1", "-c:a", "pcm_s16le",
         wav_path,
     ]
