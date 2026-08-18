@@ -212,7 +212,7 @@ export default function App() {
           </div>
         </header>
 
-        <main className='flex-1 w-full max-w-5xl mx-auto px-5 md:px-10 py-8 md:py-12'>
+        <main className={'flex-1 w-full mx-auto px-5 md:px-10 py-8 md:py-12 ' + (view === 'detail' ? 'max-w-7xl' : 'max-w-5xl')}>
           {view === 'home' && <Home onOpenTask={openTask} />}
           {view === 'detail' && <TaskDetail taskId={taskId} onBack={() => setView('home')} />}
           {view === 'settings' && <Settings />}

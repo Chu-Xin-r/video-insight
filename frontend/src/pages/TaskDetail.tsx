@@ -189,7 +189,7 @@ export default function TaskDetail({ taskId, onBack }: Props) {
           className='md:flex md:items-start md:gap-6'
         >
           {/* ===== 左列：固定播放器 + 快速提问 ===== */}
-          <div className='md:sticky md:top-0 md:w-[46%] md:shrink-0 md:max-h-[calc(100vh-1.5rem)] md:overflow-y-auto space-y-4'>
+          <div className='md:sticky md:top-0 md:w-[55%] md:shrink-0 md:max-h-[calc(100vh-1.5rem)] md:overflow-y-auto space-y-4'>
             <div className='card p-3 md:p-4'>
               <video
                 ref={videoRef}
@@ -197,7 +197,7 @@ export default function TaskDetail({ taskId, onBack }: Props) {
                 controls
                 preload='metadata'
                 onTimeUpdate={onVideoTime}
-                className='w-full max-h-[52vh] rounded-[12px] bg-black'
+                className='w-full max-h-[64vh] rounded-[12px] bg-black'
               />
               <p className='text-[12px] text-[#B8B2A8] mt-2.5 text-center leading-relaxed'>
                 点右侧章节 / 关键帧 / 文字稿时间 → 视频跳转播放；播放时文字稿自动跟随高亮
