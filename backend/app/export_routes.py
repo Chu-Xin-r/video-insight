@@ -26,7 +26,7 @@ def _export_payload(task_id: str, user_id: str = "") -> tuple[str, str]:
     t = task_store.get_task(task_id)
     if not t or not t.get("result"):
         raise HTTPException(404, "任务无结果")
-    if user_id and t.get("user_id") and t["user_id"] != user_id:
+    if user_id and t.get("user_id") and str(t["user_id"]) != str(user_id):
         raise HTTPException(404, "任务不存在")
     r = t["result"]
     sm = r.get("summary") or {}
@@ -91,7 +91,7 @@ def export_zip(task_id: str, user: dict = Depends(require_user)):
     t = task_store.get_task(task_id)
     if not t or not t.get("result"):
         raise HTTPException(404, "任务无结果")
-    if user["id"] and t.get("user_id") and t["user_id"] != user["id"]:
+    if user["id"] and t.get("user_id") and str(t["user_id"]) != str(user["id"]):
         raise HTTPException(404, "任务不存在")
     text_content, md = _export_payload(task_id)
     buf = BytesIO()

@@ -39,7 +39,7 @@ def _own(user: dict, task_id: str):
     t = task_store.get_task(task_id)
     if not t:
         return None
-    if t.get("user_id") and t["user_id"] != user["id"]:
+    if t.get("user_id") and str(t["user_id"]) != str(user["id"]):
         return None
     return t
 
