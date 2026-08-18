@@ -24,7 +24,7 @@ def extract_frame(video_path: str, t: float, out_path: str | Path) -> Path | Non
 
 
 def understand_frames(video_path: str, keypoints: list,
-                      provider_id: str, frames_dir: Path) -> list:
+                      provider_id: str, frames_dir: Path, user_id=None) -> list:
     """对每个关键点抽帧并让多模态模型描述，返回 [{time, context, image, description}]。"""
     frames_dir.mkdir(parents=True, exist_ok=True)
     results = []
@@ -39,7 +39,7 @@ def understand_frames(video_path: str, keypoints: list,
         if fp is None:
             continue
         try:
-            desc = describe_frame(provider_id, fp, f"{int(t // 60)}分{int(t % 60)}秒")
+            desc = describe_frame(provider_id, fp, f"{int(t // 60)}分{int(t % 60)}秒", user_id=user_id)
         except Exception as e:
             desc = f"（画面识别失败：{e}）"
         results.append({

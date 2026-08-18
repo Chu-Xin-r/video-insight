@@ -43,3 +43,12 @@ class TaskOut(BaseModel):
     error: str | None = None
     result: dict[str, Any] | None = None
     created_at: str = ""
+
+
+class LoginIn(BaseModel):
+    username: str
+    password: str
+
+
+class SettingsIn(BaseModel):
+    settings: dict

@@ -37,11 +37,38 @@ export interface ProvidersResp {
   providers: Record<string, Provider>;
   model_sizes: string[];
 }
+export interface UserInfo { id: number; username: string; is_admin: boolean }
+export interface UserSettings {
+  video_understanding?: boolean;
+  provider_id?: string;
+  vision_provider_id?: string;
+  summary_style?: string;
+  model_size?: string;
+  [k: string]: unknown;
+}
 
 const BASE = '';
 
+export const TOKEN_KEY = 'vi_token';
+export function getToken(): string | null {
+  try { return localStorage.getItem(TOKEN_KEY); } catch { return null; }
+}
+export function setToken(t: string | null) {
+  try {
+    if (t) localStorage.setItem(TOKEN_KEY, t);
+    else localStorage.removeItem(TOKEN_KEY);
+  } catch { /* ignore */ }
+}
+
 async function req<T>(url: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(BASE + url, init);
+  const token = getToken();
+  const headers: Record<string, string> = { ...(init?.headers as Record<string, string> | undefined) };
+  if (token) headers['Authorization'] = 'Bearer ' + token;
+  const res = await fetch(BASE + url, { ...init, headers });
+  if (res.status === 401) {
+    setToken(null);
+    window.dispatchEvent(new Event('vi:unauthorized'));
+  }
   if (!res.ok) {
     let msg = res.statusText;
     try { const j = await res.json(); msg = j.detail || msg; } catch { /* ignore */ }
@@ -52,6 +79,24 @@ async function req<T>(url: string, init?: RequestInit): Promise<T> {
 
 export const api = {
   health: () => req<{ status: string; cuda: boolean; default_model: string }>('/api/health'),
+  register: (username: string, password: string) =>
+    req<{ ok: boolean; user: UserInfo }>('/api/register', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password }),
+    }),
+  login: (username: string, password: string) =>
+    req<{ token: string; user: UserInfo }>('/api/login', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password }),
+    }),
+  logout: () => req<{ ok: boolean }>('/api/logout', { method: 'POST' }),
+  me: () => req<{ user: UserInfo }>('/api/me'),
+  getSettings: () => req<{ settings: UserSettings }>('/api/settings'),
+  saveSettings: (settings: UserSettings) =>
+    req<{ ok: boolean }>('/api/settings', {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ settings }),
+    }),
   upload: (file: File, opts: {
     model_size: string; video_understanding: boolean; provider_id: string;
     vision_provider_id: string; summary_style: string;

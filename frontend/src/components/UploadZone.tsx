@@ -1,8 +1,8 @@
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { UploadIcon, SparkleIcon, LayersIcon, ImageIcon, PlayIcon } from './Icons';
 import Accordion from './Accordion';
-import { api, ProvidersResp, Task } from '../lib/api';
+import { api, ProvidersResp, Task, UserSettings } from '../lib/api';
 
 const STYLES: [string, string][] = [
   ['detailed', '详细笔记'],
@@ -35,6 +35,24 @@ export default function UploadZone({ providers, onUploaded, onError }: Props) {
   const [providerId, setProviderId] = useState('');
   const [visionProviderId, setVisionProviderId] = useState('');
 
+  // 记住的设置（图片推理开关 / 模型 / 风格）
+  useEffect(() => {
+    api.getSettings().then(({ settings }) => {
+      if (settings.model_size) setModelSize(settings.model_size);
+      if (settings.summary_style) setStyle(settings.summary_style);
+      if (settings.video_understanding !== undefined) setVision(Boolean(settings.video_understanding));
+      setProviderId(settings.provider_id || '');
+      setVisionProviderId(settings.vision_provider_id || '');
+    }).catch(() => {});
+  }, []);
+
+  // providers 变化后，若保存的 id 不存在则回退
+  useEffect(() => {
+    if (!providers) return;
+    if (providerId && !plist.some((p) => p.id === providerId)) setProviderId('');
+    if (visionProviderId && !visionProviders.some((p) => p.id === visionProviderId)) setVisionProviderId('');
+  }, [providers]);
+
   const plist = providers ? Object.values(providers.providers) : [];
   const visionProviders = plist.filter((p) => p.vision);
   const effProviderId = providerId || (plist[0] ? plist[0].id : '');
@@ -56,6 +74,13 @@ export default function UploadZone({ providers, onUploaded, onError }: Props) {
         vision_provider_id: vision ? effVisionProviderId : '',
         summary_style: style,
       });
+      api.saveSettings({
+        model_size: modelSize === 'auto' ? '' : modelSize,
+        video_understanding: vision,
+        provider_id: effProviderId,
+        vision_provider_id: vision ? effVisionProviderId : '',
+        summary_style: style,
+      } as UserSettings).catch(() => {});
       onUploaded(t);
     } catch (e) {
       onError((e as Error).message);

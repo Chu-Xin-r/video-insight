@@ -4,7 +4,9 @@ from __future__ import annotations
 import zipfile
 from io import BytesIO
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
+
+from .auth import require_user
 from fastapi.responses import Response
 
 from . import tasks as task_store
@@ -19,11 +21,13 @@ def _fmt_ts(sec: float) -> str:
     return f"{h}:{m:02d}:{s:02d}" if h else f"{m}:{s:02d}"
 
 
-def _export_payload(task_id: str) -> tuple[str, str]:
+def _export_payload(task_id: str, user_id: str = "") -> tuple[str, str]:
     """返回 (文字稿文本, Markdown 报告)。"""
     t = task_store.get_task(task_id)
     if not t or not t.get("result"):
         raise HTTPException(404, "任务无结果")
+    if user_id and t.get("user_id") and t["user_id"] != user_id:
+        raise HTTPException(404, "任务不存在")
     r = t["result"]
     sm = r.get("summary") or {}
     segs = r.get("segments") or []
@@ -60,9 +64,9 @@ def _export_payload(task_id: str) -> tuple[str, str]:
 
 
 @router.get("/api/tasks/{task_id}/export/text")
-def export_text(task_id: str):
+def export_text(task_id: str, user: dict = Depends(require_user)):
     """下载文字稿（带时间戳 txt）。"""
-    text_content, _ = _export_payload(task_id)
+    text_content, _ = _export_payload(task_id, user["id"])
     return Response(
         text_content.encode("utf-8"),
         media_type="text/plain; charset=utf-8",
@@ -71,9 +75,9 @@ def export_text(task_id: str):
 
 
 @router.get("/api/tasks/{task_id}/export/report")
-def export_report(task_id: str):
+def export_report(task_id: str, user: dict = Depends(require_user)):
     """下载分析报告（Markdown）。"""
-    _, md = _export_payload(task_id)
+    _, md = _export_payload(task_id, user["id"])
     return Response(
         md.encode("utf-8"),
         media_type="text/markdown; charset=utf-8",
@@ -82,11 +86,13 @@ def export_report(task_id: str):
 
 
 @router.get("/api/tasks/{task_id}/export/zip")
-def export_zip(task_id: str):
+def export_zip(task_id: str, user: dict = Depends(require_user)):
     """打包下载：文字稿 + 报告 + 关键帧图片。"""
     t = task_store.get_task(task_id)
     if not t or not t.get("result"):
         raise HTTPException(404, "任务无结果")
+    if user["id"] and t.get("user_id") and t["user_id"] != user["id"]:
+        raise HTTPException(404, "任务不存在")
     text_content, md = _export_payload(task_id)
     buf = BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:

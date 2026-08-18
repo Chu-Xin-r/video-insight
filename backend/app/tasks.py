@@ -24,6 +24,7 @@ def init_db() -> None:
         c.execute("""
             CREATE TABLE IF NOT EXISTS tasks (
                 id TEXT PRIMARY KEY,
+                user_id TEXT,
                 filename TEXT,
                 status TEXT,
                 progress INTEGER,
@@ -33,10 +34,13 @@ def init_db() -> None:
                 created_at TEXT
             )
         """)
+        cols = [r[1] for r in c.execute("PRAGMA table_info(tasks)").fetchall()]
+        if "user_id" not in cols:
+            c.execute("ALTER TABLE tasks ADD COLUMN user_id TEXT")
         c.commit()
 
 
-def create_task(filename: str) -> dict:
+def create_task(filename: str, user_id: str = "") -> dict:
     task_id = uuid.uuid4().hex[:12]
     row = {
         "id": task_id,
@@ -49,8 +53,8 @@ def create_task(filename: str) -> dict:
         "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
     }
     with _lock, _conn() as c:
-        c.execute("INSERT INTO tasks (id,filename,status,progress,stage,error,result,created_at) VALUES (?,?,?,?,?,?,?,?)",
-                  (row["id"], row["filename"], row["status"], 0, row["stage"], None, None, row["created_at"]))
+        c.execute("INSERT INTO tasks (id,user_id,filename,status,progress,stage,error,result,created_at) VALUES (?,?,?,?,?,?,?,?,?)",
+                  (row["id"], user_id, row["filename"], row["status"], 0, row["stage"], None, None, row["created_at"]))
         c.commit()
     return row
 
@@ -82,9 +86,12 @@ def get_task(task_id: str) -> dict | None:
     return d
 
 
-def list_tasks(limit: int = 50) -> list[dict]:
+def list_tasks(user_id: str = "", limit: int = 50) -> list[dict]:
     with _lock, _conn() as c:
-        rows = c.execute("SELECT * FROM tasks ORDER BY created_at DESC LIMIT ?", (limit,)).fetchall()
+        if user_id:
+            rows = c.execute("SELECT * FROM tasks WHERE user_id=? ORDER BY created_at DESC LIMIT ?", (user_id, limit)).fetchall()
+        else:
+            rows = c.execute("SELECT * FROM tasks ORDER BY created_at DESC LIMIT ?", (limit,)).fetchall()
     out = []
     for row in rows:
         d = dict(row)
@@ -98,11 +105,13 @@ def list_tasks(limit: int = 50) -> list[dict]:
 
 
 
-def delete_task(task_id: str) -> dict | None:
+def delete_task(task_id: str, user_id: str = "") -> dict | None:
     """删除任务数据库记录，返回任务信息（供清理文件）。"""
     with _lock, _conn() as c:
         row = c.execute("SELECT * FROM tasks WHERE id=?", (task_id,)).fetchone()
         if row is None:
+            return None
+        if user_id and row["user_id"] != user_id:
             return None
         c.execute("DELETE FROM tasks WHERE id=?", (task_id,))
         c.commit()

@@ -7,7 +7,7 @@ import traceback
 from pathlib import Path
 
 from . import tasks as task_store
-from .config import get_providers
+from .auth import list_providers as _list_user_providers
 from .llm import find_keypoints, summarize
 from .transcribe import cuda_available, extract_audio, transcribe
 from .vision import understand_frames
@@ -32,13 +32,14 @@ def default_model_size() -> str:
 
 def run_task(task_id: str, video_path: str, options: dict) -> None:
     """后台执行完整流水线。"""
+    user_id = options.get("user_id") or ""
     model_size = options.get("model_size") or default_model_size()
     provider_id = options.get("provider_id") or ""
     if not provider_id:
-        provider_id = next(iter(get_providers().keys()), "")
+        provider_id = next(iter(_list_user_providers(user_id).keys()), "")
     vision_provider = options.get("vision_provider_id") or provider_id
     if not vision_provider:
-        vision_provider = next((k for k, v in get_providers().items() if v.get("vision")), "")
+        vision_provider = next((k for k, v in _list_user_providers(user_id).items() if v.get("vision")), "")
     use_vision = bool(options.get("video_understanding"))
     style = options.get("summary_style") or "detailed"
 
@@ -65,7 +66,7 @@ def run_task(task_id: str, video_path: str, options: dict) -> None:
 
         # 阶段 3：AI 总结（70% ~ 85%）
         try:
-            summary = summarize(provider_id, transcript["text"], style=style)
+            summary = summarize(provider_id, transcript["text"], style=style, user_id=user_id)
         except Exception as e:
             summary = {"title": "视频分析", "summary": f"（总结失败：{e}）", "chapters": [], "keywords": []}
             task_store.update_task(task_id, error=f"总结失败: {e}")
@@ -75,9 +76,9 @@ def run_task(task_id: str, video_path: str, options: dict) -> None:
         frames = []
         if use_vision and transcript.get("segments"):
             task_store.update_task(task_id, progress=88, stage="正在分析关键画面…")
-            keypoints = find_keypoints(provider_id, transcript["text"], transcript["segments"])
+            keypoints = find_keypoints(provider_id, transcript["text"], transcript["segments"], user_id=user_id)
             try:
-                frames = understand_frames(str(video), keypoints, vision_provider, frames_dir)
+                frames = understand_frames(str(video), keypoints, vision_provider, frames_dir, user_id=user_id)
             except Exception as e:
                 frames = []
                 task_store.update_task(task_id, error=f"画面理解失败: {e}")

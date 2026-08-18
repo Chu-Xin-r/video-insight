@@ -3,8 +3,9 @@ import { motion } from 'framer-motion';
 import Home from './pages/Home';
 import TaskDetail from './pages/TaskDetail';
 import Settings from './pages/Settings';
-import { SettingsIcon, FilmIcon, TrashIcon } from './components/Icons';
-import { api, Task } from './lib/api';
+import Login from './pages/Login';
+import { SettingsIcon, FilmIcon, TrashIcon, UserIcon } from './components/Icons';
+import { api, Task, UserInfo, getToken, setToken } from './lib/api';
 
 type View = 'home' | 'detail' | 'settings';
 
@@ -22,17 +23,37 @@ export default function App() {
   const [taskId, setTaskId] = useState<string>('');
   const [health, setHealth] = useState<{ cuda: boolean; default_model: string } | null>(null);
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [user, setUser] = useState<UserInfo | null>(null);
+  const [authChecked, setAuthChecked] = useState(false);
+
+  // 登录态初始化
+  useEffect(() => {
+    const token = getToken();
+    if (!token) { setAuthChecked(true); return; }
+    api.me()
+      .then((r) => setUser(r.user))
+      .catch(() => setToken(null))
+      .finally(() => setAuthChecked(true));
+  }, []);
+
+  // 401 事件 → 登出
+  useEffect(() => {
+    const h = () => { setUser(null); setView('home'); };
+    window.addEventListener('vi:unauthorized', h);
+    return () => window.removeEventListener('vi:unauthorized', h);
+  }, []);
 
   useEffect(() => {
     fetch('/api/health').then((r) => r.json()).then(setHealth).catch(() => {});
   }, []);
 
   useEffect(() => {
+    if (!user) return;
     const refresh = () => api.tasks().then(setTasks).catch(() => {});
     refresh();
     const t = setInterval(refresh, 4000);
     return () => clearInterval(t);
-  }, []);
+  }, [user]);
 
   const openTask = (id: string) => { setTaskId(id); setView('detail'); };
 
@@ -45,11 +66,30 @@ export default function App() {
     } catch { /* ignore */ }
   };
 
+  const doLogout = async () => {
+    try { await api.logout(); } catch { /* ignore */ }
+    setToken(null);
+    setUser(null);
+    setView('home');
+  };
+
   const navCls = (active: boolean) =>
     'w-full px-4 py-2.5 rounded-[12px] text-sm font-medium transition-all duration-300 flex items-center gap-2.5 ' +
     (active
       ? 'text-[#C4785A] bg-[rgba(196,120,90,0.1)]'
       : 'text-[#8C8C8C] hover:text-[#2C2C2C] hover:bg-[#F1EAE0]');
+
+  // 登录检查
+  if (!authChecked) {
+    return (
+      <div className='min-h-screen flex items-center justify-center bg-[#FAF7F2]'>
+        <span className='badge-oat'>正在载入…</span>
+      </div>
+    );
+  }
+  if (!user) {
+    return <Login onLogin={(u) => { setUser(u); setView('home'); }} />;
+  }
 
   return (
     <div className='min-h-screen md:flex'>
@@ -129,6 +169,23 @@ export default function App() {
             ))
           )}
         </div>
+
+        {/* 当前账号 */}
+        <div className='mt-4 pt-4 border-t border-[#EDE8E0] flex items-center justify-between'>
+          <div className='flex items-center gap-2 min-w-0'>
+            <span className='w-8 h-8 rounded-[10px] bg-[#F1EAE0] text-[#C4785A] flex items-center justify-center shrink-0'>
+              <UserIcon size={15} />
+            </span>
+            <div className='min-w-0'>
+              <p className='text-[13px] font-medium text-[#2C2C2C] truncate'>{user.username}</p>
+              <p className='text-[10px] text-[#B8B2A8]'>{user.is_admin ? '管理员' : '普通账号'}</p>
+            </div>
+          </div>
+          <button
+            onClick={doLogout}
+            className='text-[11px] text-[#8C8C8C] hover:text-[#A85B4E] px-2 py-1 rounded-[8px] hover:bg-[rgba(180,90,80,0.06)] transition-all duration-300 shrink-0'
+          >退出</button>
+        </div>
       </aside>
 
       {/* ===== 右侧主区 ===== */}
@@ -142,9 +199,16 @@ export default function App() {
               </span>
               <span className='font-semibold text-[15px] text-[#2C2C2C]'>视频洞察</span>
             </button>
-            <button onClick={() => setView('settings')} className={navCls(view === 'settings') + ' !w-auto'}>
-              <SettingsIcon size={15} /> API
-            </button>
+            <div className='flex items-center gap-1.5'>
+              <button onClick={() => setView('settings')} className={navCls(view === 'settings') + ' !w-auto'}>
+                <SettingsIcon size={15} /> API
+              </button>
+              <button
+                onClick={doLogout}
+                title='退出登录'
+                className='p-2 rounded-[10px] text-[#8C8C8C] hover:text-[#A85B4E] hover:bg-[rgba(180,90,80,0.06)] transition-all duration-300'
+              >退出</button>
+            </div>
           </div>
         </header>
 

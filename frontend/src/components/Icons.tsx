@@ -112,3 +112,18 @@ export const LayersIcon = (p: IconProps) => (
     <path d="M12 3l9 5-9 5-9-5z" /><path d="M3 13l9 5 9-5" />
   </svg>
 );
+
+export const UserIcon = (p: IconProps) => (
+  <svg {...base(p)}>
+    <circle cx="12" cy="8" r="3.6" />
+    <path d="M4.5 20.5c1.2-3.6 4-5.5 7.5-5.5s6.3 1.9 7.5 5.5" />
+  </svg>
+);
+
+export const LockIcon = (p: IconProps) => (
+  <svg {...base(p)}>
+    <rect x="4.5" y="10.5" width="15" height="9.5" rx="2.5" />
+    <path d="M8 10.5V8a4 4 0 0 1 8 0v2.5" />
+    <circle cx="12" cy="15" r="1.3" />
+  </svg>
+);

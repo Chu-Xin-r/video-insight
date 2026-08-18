@@ -9,10 +9,11 @@ from typing import Any
 from openai import OpenAI
 
 from .config import resolve_provider
+from . import auth as auth_store
 
 
-def _client(provider_id: str):
-    p = resolve_provider(provider_id)
+def _client(provider_id: str, user_id=None):
+    p = auth_store.resolve_provider(user_id, provider_id) if user_id else resolve_provider(provider_id)
     if not p or not p.get("api_key"):
         raise RuntimeError(f"提供商 {provider_id} 未配置 API Key")
     client = OpenAI(base_url=p["base_url"], api_key=p["api_key"], timeout=120)
@@ -20,8 +21,8 @@ def _client(provider_id: str):
 
 
 def _chat(provider_id: str, messages: list, model: str | None = None,
-          temperature: float = 0.3) -> str:
-    client, p = _client(provider_id)
+          temperature: float = 0.3, user_id=None) -> str:
+    client, p = _client(provider_id, user_id)
     resp = client.chat.completions.create(
         model=model or p.get("model") or "gpt-4o-mini",
         messages=messages,
@@ -31,7 +32,7 @@ def _chat(provider_id: str, messages: list, model: str | None = None,
 
 
 def summarize(provider_id: str, transcript: str, style: str = "detailed",
-              language: str = "zh") -> dict:
+              language: str = "zh", user_id=None) -> dict:
     """文字稿 → 结构化总结（摘要 + 章节时间轴 + 要点）。"""
     style_desc = {
         "minimal": "精简摘要，只保留核心信息，300 字以内",
@@ -80,11 +81,11 @@ def summarize(provider_id: str, transcript: str, style: str = "detailed",
     raw = _chat(provider_id, [
         {"role": "system", "content": "你只输出合法 JSON，不输出任何其他内容。"},
         {"role": "user", "content": prompt + transcript},
-    ], temperature=0.2)
+    ], temperature=0.2, user_id=user_id)
     return _parse_json(raw)
 
 
-def find_keypoints(provider_id: str, transcript: str, segments: list) -> list:
+def find_keypoints(provider_id: str, transcript: str, segments: list, user_id=None) -> list:
     """找出「讲师讲解知识点 / 展示板书 PPT / 公式 / 例题」的关键时刻（供抽帧识别）。
 
     优先让 LLM 基于语义判断知识点讲解时刻（比正则准确），失败时回退正则。
@@ -114,7 +115,7 @@ def find_keypoints(provider_id: str, transcript: str, segments: list) -> list:
         raw = _chat(provider_id, [
             {'role': 'system', 'content': '你只输出合法 JSON，不输出其他内容。'},
             {'role': 'user', 'content': prompt},
-        ], temperature=0.2)
+        ], temperature=0.2, user_id=user_id)
         data = _parse_json(raw)
         kps = data.get('keypoints', []) if isinstance(data, dict) else []
         times = {int(s['start']) for s in sample}
@@ -144,14 +145,14 @@ def find_keypoints(provider_id: str, transcript: str, segments: list) -> list:
         return selected
     return [{'time': s['start'], 'reason': s['text'][:40]} for s in sample[:: max(1, len(sample) // 6)]][:8]
 
-def describe_frame(provider_id: str, image_path: str | Path, context: str) -> str:
+def describe_frame(provider_id: str, image_path: str | Path, context: str, user_id=None) -> str:
     """多模态：让视觉模型描述一帧画面（PPT/图表/代码/字幕等）。"""
     img = Path(image_path)
     b64 = base64.b64encode(img.read_bytes()).decode()
     ext = img.suffix.lower().lstrip(".") or "jpeg"
     mime = "png" if ext == "png" else "jpeg"
 
-    client, p = _client(provider_id)
+    client, p = _client(provider_id, user_id)
     if not p.get("vision"):
         raise RuntimeError(f"提供商 {provider_id} 不支持图片输入，请在设置里选择支持视觉的模型")
 
