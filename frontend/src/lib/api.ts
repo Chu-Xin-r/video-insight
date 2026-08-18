@@ -118,7 +118,14 @@ export const api = {
     req<Provider>('/api/providers', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(p) }),
   deleteProvider: (id: string) => req<{ ok: boolean }>(`/api/providers/${id}`, { method: 'DELETE' }),
   testProvider: (id: string) => req<{ ok: boolean; reply: string }>(`/api/providers/${id}/test`, { method: 'POST' }),
-  taskFile: (taskId: string, name: string) => `${BASE}/api/task_files/${taskId}/${name}`,
+  taskFile: (taskId: string, name: string) => {
+    const tk = getToken();
+    return `${BASE}/api/task_files/${taskId}/${name}${tk ? '?token=' + encodeURIComponent(tk) : ''}`;
+  },
+  exportUrl: (taskId: string, kind: 'text' | 'report' | 'zip') => {
+    const tk = getToken();
+    return `${BASE}/api/tasks/${taskId}/export/${kind}${tk ? '?token=' + encodeURIComponent(tk) : ''}`;
+  },
 };
 
 export function fmtTime(sec: number): string {

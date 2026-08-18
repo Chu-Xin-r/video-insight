@@ -247,17 +247,24 @@ def resolve_provider(user_id: int, pid: str) -> dict[str, Any] | None:
 
 # ---------- FastAPI 认证依赖 ----------
 
-from fastapi import Depends, HTTPException
+from fastapi import Depends, HTTPException, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 _bearer = HTTPBearer(auto_error=False)
 
 
-def require_user(cred: HTTPAuthorizationCredentials | None = Depends(_bearer)) -> dict:
-    """FastAPI 依赖：从 Authorization: Bearer <token> 解析当前用户。"""
-    if not cred or not cred.credentials:
+def require_user(request: Request,
+                 cred: HTTPAuthorizationCredentials | None = Depends(_bearer)) -> dict:
+    """FastAPI 依赖：Authorization: Bearer <token> 或 ?token= 解析当前用户
+    （query 参数用于 <img>/<a href> 等无法带 header 的浏览器请求）。"""
+    token = ""
+    if cred and cred.credentials:
+        token = cred.credentials
+    elif request is not None:
+        token = request.query_params.get("token", "")
+    if not token:
         raise HTTPException(401, "未登录或登录已过期")
-    user = verify_token(cred.credentials)
+    user = verify_token(token)
     if not user:
         raise HTTPException(401, "未登录或登录已过期")
     return user

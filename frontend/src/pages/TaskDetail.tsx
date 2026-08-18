@@ -111,9 +111,9 @@ export default function TaskDetail({ taskId, onBack }: Props) {
                 <h2 className='text-[26px] font-semibold text-warm tracking-[-0.02em] mb-5 leading-snug'>{r.summary.title}</h2>
               </div>
               <div className='flex gap-2 shrink-0 pt-1'>
-                <a href={'/api/tasks/' + taskId + '/export/text'} className='btn-outline !py-2 !px-4 !text-[13px]'>文字稿</a>
-                <a href={'/api/tasks/' + taskId + '/export/report'} className='btn-outline !py-2 !px-4 !text-[13px]'>报告</a>
-                <a href={'/api/tasks/' + taskId + '/export/zip'} className='btn-primary !py-2 !px-4 !text-[13px]'>打包下载</a>
+                <a href={api.exportUrl(taskId, 'text')} className='btn-outline !py-2 !px-4 !text-[13px]'>文字稿</a>
+                <a href={api.exportUrl(taskId, 'report')} className='btn-outline !py-2 !px-4 !text-[13px]'>报告</a>
+                <a href={api.exportUrl(taskId, 'zip')} className='btn-primary !py-2 !px-4 !text-[13px]'>打包下载</a>
               </div>
             </div>
             <p className='body-text'>{r.summary.summary}</p>
