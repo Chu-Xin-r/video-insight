@@ -11,6 +11,16 @@ AI 解析视频讲了什么 —— 上传本地视频，自动生成 **摘要 / 
 - ⚙️ **自定义 API**：任意 OpenAI 兼容接口（DeepSeek / Grok / 中转站 / Ollama），内置预置配置（本地注入，不进仓库）
 - 🔒 **隐私**：视频文件只在本机/服务器处理，仅文字稿与关键帧发送到所配置的 AI API
 
+## 📸 界面预览
+
+| 登录 / 注册 | 首页 · 上传与分析 |
+| --- | --- |
+| ![登录页](docs/screenshots/login.png) | ![首页上传](docs/screenshots/home.png) |
+| **视频链接模式** | **详情页 · 左右分栏** |
+| ![视频链接模式](docs/screenshots/home-url.png) | ![详情页](docs/screenshots/detail.png) |
+| **文字稿联动高亮** | **AI 问答（时间戳引用）** |
+| ![文字稿联动](docs/screenshots/transcript.png) | ![AI 问答](docs/screenshots/ask.png) |
+
 ## 🏗 技术栈
 
 | 层 | 技术 |
