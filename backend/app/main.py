@@ -31,6 +31,12 @@ TASK_DIR.mkdir(parents=True, exist_ok=True)
 task_store.init_db()
 auth_store.init_auth_db()
 
+# 清理上次中断的僵尸任务（服务重启/崩溃遗留的 running/pending）
+for _t in task_store.list_tasks():
+    if _t.get("status") in ("running", "pending"):
+        task_store.update_task(_t["id"], status="failed", stage="中断",
+                               error="服务重启，该任务中断，请删除后重新上传")
+
 ALLOWED_EXT = {".mp4", ".mkv", ".mov", ".avi", ".flv", ".wmv", ".webm", ".m4v", ".ts"}
 
 

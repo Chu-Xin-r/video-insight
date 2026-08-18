@@ -30,6 +30,28 @@ def default_model_size() -> str:
     return "small"
 
 
+def _with_timeout(fn, timeout: float):
+    """daemon 线程 + join 超时：防止第三方调用（如 fxidc 慢响应）无限阻塞任务。
+    超时后返回 ('timeout', None)，卡住的 daemon 线程继续跑，进程退出时自动回收。
+    线程内异常以 ('error', e) 形式抛出。"""
+    box = {}
+
+    def _run() -> None:
+        try:
+            box["r"] = fn()
+        except Exception as e:
+            box["e"] = e
+
+    t = threading.Thread(target=_run, daemon=True)
+    t.start()
+    t.join(timeout)
+    if t.is_alive():
+        return "timeout", None
+    if "e" in box:
+        return "error", box["e"]
+    return "ok", box.get("r")
+
+
 def run_task(task_id: str, video_path: str, options: dict) -> None:
     """后台执行完整流水线。"""
     user_id = options.get("user_id") or ""
@@ -64,9 +86,15 @@ def run_task(task_id: str, video_path: str, options: dict) -> None:
         transcript = transcribe(str(wav_path), model_size=model_size, on_progress=on_prog)
         task_store.update_task(task_id, progress=70, stage="语音识别完成，AI 正在总结…")
 
-        # 阶段 3：AI 总结（70% ~ 85%）
+        # 阶段 3：AI 总结（70% ~ 85%，5 分钟超时保护）
         try:
-            summary = summarize(provider_id, transcript["text"], style=style, user_id=user_id)
+            status, summary = _with_timeout(
+                lambda: summarize(provider_id, transcript["text"], style=style, user_id=user_id), 300)
+            if status == "timeout":
+                summary = {"title": "视频分析", "summary": "（总结超时：AI 服务 5 分钟内未响应，可重新上传重试）", "chapters": [], "keywords": []}
+                task_store.update_task(task_id, error="总结超时（AI 服务未响应）")
+            elif status == "error":
+                raise summary  # 原异常
         except Exception as e:
             summary = {"title": "视频分析", "summary": f"（总结失败：{e}）", "chapters": [], "keywords": []}
             task_store.update_task(task_id, error=f"总结失败: {e}")
@@ -76,9 +104,15 @@ def run_task(task_id: str, video_path: str, options: dict) -> None:
         frames = []
         if use_vision and transcript.get("segments"):
             task_store.update_task(task_id, progress=88, stage="正在分析关键画面…")
-            keypoints = find_keypoints(provider_id, transcript["text"], transcript["segments"], user_id=user_id)
+            _, keypoints = _with_timeout(
+                lambda: find_keypoints(provider_id, transcript["text"], transcript["segments"], user_id=user_id), 180)
+            if not keypoints:
+                keypoints = []
             try:
-                frames = understand_frames(str(video), keypoints, vision_provider, frames_dir, user_id=user_id)
+                _, frames = _with_timeout(
+                    lambda: understand_frames(str(video), keypoints, vision_provider, frames_dir, user_id=user_id), 900)
+                if not frames:
+                    frames = []
             except Exception as e:
                 frames = []
                 task_store.update_task(task_id, error=f"画面理解失败: {e}")
