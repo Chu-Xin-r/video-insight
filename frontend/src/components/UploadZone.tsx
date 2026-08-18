@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { UploadIcon, SparkleIcon, LayersIcon, ImageIcon, PlayIcon } from './Icons';
+import { UploadIcon, SparkleIcon, LayersIcon, ImageIcon, PlayIcon, LinkIcon } from './Icons';
 import Accordion from './Accordion';
 import { api, ProvidersResp, Task, UserSettings } from '../lib/api';
 
@@ -27,6 +27,8 @@ export default function UploadZone({ providers, onUploaded, onError }: Props) {
   const [file, setFile] = useState<File | null>(null);
   const [dragging, setDragging] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [mode, setMode] = useState<'file' | 'url'>('file');
+  const [url, setUrl] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
 
   const [modelSize, setModelSize] = useState('auto');
@@ -46,6 +48,11 @@ export default function UploadZone({ providers, onUploaded, onError }: Props) {
     }).catch(() => {});
   }, []);
 
+  const plist = providers ? Object.values(providers.providers) : [];
+  const visionProviders = plist.filter((p) => p.vision);
+  const effProviderId = providerId || (plist[0] ? plist[0].id : '');
+  const effVisionProviderId = visionProviderId || (visionProviders[0] ? visionProviders[0].id : '');
+
   // providers 变化后，若保存的 id 不存在则回退
   useEffect(() => {
     if (!providers) return;
@@ -53,17 +60,44 @@ export default function UploadZone({ providers, onUploaded, onError }: Props) {
     if (visionProviderId && !visionProviders.some((p) => p.id === visionProviderId)) setVisionProviderId('');
   }, [providers]);
 
-  const plist = providers ? Object.values(providers.providers) : [];
-  const visionProviders = plist.filter((p) => p.vision);
-  const effProviderId = providerId || (plist[0] ? plist[0].id : '');
-  const effVisionProviderId = visionProviderId || (visionProviders[0] ? visionProviders[0].id : '');
-
   const pick = useCallback((f: File) => {
-    if (f && /\.(mp4|mkv|mov|avi|flv|wmv|webm|m4v|ts)$/i.test(f.name)) setFile(f);
+    if (f && /.(mp4|mkv|mov|avi|flv|wmv|webm|m4v|ts)$/i.test(f.name)) setFile(f);
     else onError('不支持的视频格式，支持 mp4 / mkv / mov / avi / flv / wmv / webm');
   }, [onError]);
 
+  const savePrefs = () => {
+    api.saveSettings({
+      model_size: modelSize === 'auto' ? '' : modelSize,
+      video_understanding: vision,
+      provider_id: effProviderId,
+      vision_provider_id: vision ? effVisionProviderId : '',
+      summary_style: style,
+    } as UserSettings).catch(() => {});
+  };
+
   const doUpload = async () => {
+    if (mode === 'url') {
+      if (!url.trim()) return onError('请先粘贴视频链接');
+      if (!/^https?:\/\//i.test(url.trim())) return onError('链接需以 http:// 或 https:// 开头');
+      setUploading(true);
+      try {
+        const t = await api.upload(null, {
+          model_size: modelSize === 'auto' ? '' : modelSize,
+          video_understanding: vision,
+          provider_id: effProviderId,
+          vision_provider_id: vision ? effVisionProviderId : '',
+          summary_style: style,
+          video_url: url.trim(),
+        });
+        savePrefs();
+        onUploaded(t);
+      } catch (e) {
+        onError((e as Error).message);
+      } finally {
+        setUploading(false);
+      }
+      return;
+    }
     if (!file) return onError('请先选择视频文件');
     setUploading(true);
     try {
@@ -74,13 +108,7 @@ export default function UploadZone({ providers, onUploaded, onError }: Props) {
         vision_provider_id: vision ? effVisionProviderId : '',
         summary_style: style,
       });
-      api.saveSettings({
-        model_size: modelSize === 'auto' ? '' : modelSize,
-        video_understanding: vision,
-        provider_id: effProviderId,
-        vision_provider_id: vision ? effVisionProviderId : '',
-        summary_style: style,
-      } as UserSettings).catch(() => {});
+      savePrefs();
       onUploaded(t);
     } catch (e) {
       onError((e as Error).message);
@@ -89,40 +117,82 @@ export default function UploadZone({ providers, onUploaded, onError }: Props) {
     }
   };
 
+  const tabCls = (active: boolean) =>
+    'flex-1 py-2 rounded-[9px] text-[13px] font-medium transition-all duration-300 ' +
+    (active ? 'bg-white text-[#C4785A] shadow-sm' : 'text-[#8C8C8C] hover:text-[#2C2C2C]');
+
   return (
     <div className='space-y-8'>
-      {/* 上传区 */}
-      <motion.div
-        onClick={() => inputRef.current?.click()}
-        onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
-        onDragLeave={() => setDragging(false)}
-        onDrop={(e) => { e.preventDefault(); setDragging(false); if (e.dataTransfer.files[0]) pick(e.dataTransfer.files[0]); }}
-        animate={{ scale: dragging ? 1.008 : 1 }}
-        transition={{ duration: 0.3, ease: EASE }}
-        className={'upload-card p-12 md:p-16 text-center cursor-pointer ' + (dragging ? 'dragging' : '')}
-      >
-        <input ref={inputRef} type='file' accept='.mp4,.mkv,.mov,.avi,.flv,.wmv,.webm,.m4v,.ts' hidden
-          onChange={(e) => e.target.files?.[0] && pick(e.target.files[0])} />
-        <motion.div
-          animate={{ y: [0, -6, 0] }}
-          transition={{ duration: 2.6, repeat: Infinity, ease: 'easeInOut' }}
-          className='w-20 h-20 mx-auto mb-7 rounded-[22px] bg-gradient-to-br from-[#C4785A] to-[#D8A48F] flex items-center justify-center text-white shadow-[0_10px_30px_rgba(196,120,90,0.35)]'
-        >
-          <UploadIcon size={32} />
-        </motion.div>
-        <p className='eyebrow mb-3'>Upload Video</p>
-        {file ? (
-          <div>
-            <p className='text-[20px] font-semibold text-[#2C2C2C] tracking-[-0.01em]'>{file.name}</p>
-            <p className='text-sm text-[#8C8C8C] mt-1.5'>{((file.size) / 1024 / 1024).toFixed(1)} MB · 点击可重新选择</p>
-          </div>
+      {/* 来源切换 + 上传区 */}
+      <div>
+        <div className='flex rounded-[12px] bg-[#F1EAE0] p-1 mb-4 max-w-[320px]'>
+          <button onClick={() => setMode('file')} className={tabCls(mode === 'file')}>
+            <span className='inline-flex items-center gap-1.5'><UploadIcon size={14} /> 本地上传</span>
+          </button>
+          <button onClick={() => setMode('url')} className={tabCls(mode === 'url')}>
+            <span className='inline-flex items-center gap-1.5'><LinkIcon size={14} /> 视频链接</span>
+          </button>
+        </div>
+
+        {mode === 'file' ? (
+          <motion.div
+            onClick={() => inputRef.current?.click()}
+            onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
+            onDragLeave={() => setDragging(false)}
+            onDrop={(e) => { e.preventDefault(); setDragging(false); if (e.dataTransfer.files[0]) pick(e.dataTransfer.files[0]); }}
+            animate={{ scale: dragging ? 1.008 : 1 }}
+            transition={{ duration: 0.3, ease: EASE }}
+            className={'upload-card p-10 md:p-12 text-center cursor-pointer ' + (dragging ? 'dragging' : '')}
+          >
+            <input ref={inputRef} type='file' accept='.mp4,.mkv,.mov,.avi,.flv,.wmv,.webm,.m4v,.ts' hidden
+              onChange={(e) => e.target.files?.[0] && pick(e.target.files[0])} />
+            <motion.div
+              animate={{ y: [0, -6, 0] }}
+              transition={{ duration: 2.6, repeat: Infinity, ease: 'easeInOut' }}
+              className='w-16 h-16 mx-auto mb-5 rounded-[20px] bg-gradient-to-br from-[#C4785A] to-[#D8A48F] flex items-center justify-center text-white shadow-[0_10px_30px_rgba(196,120,90,0.35)]'
+            >
+              <UploadIcon size={28} />
+            </motion.div>
+            <p className='eyebrow mb-3'>Upload Video</p>
+            {file ? (
+              <div>
+                <p className='text-[19px] font-semibold text-[#2C2C2C] tracking-[-0.01em]'>{file.name}</p>
+                <p className='text-sm text-[#8C8C8C] mt-1.5'>{((file.size) / 1024 / 1024).toFixed(1)} MB · 点击可重新选择</p>
+              </div>
+            ) : (
+              <div>
+                <p className='text-[20px] font-semibold text-[#2C2C2C] tracking-[-0.01em]'>拖拽视频到这里，或点击选择文件</p>
+                <p className='text-sm text-[#8C8C8C] mt-2'>支持 mp4 / mkv / mov / avi 等常见格式 · 视频在本地处理</p>
+              </div>
+            )}
+          </motion.div>
         ) : (
-          <div>
-            <p className='text-[22px] font-semibold text-[#2C2C2C] tracking-[-0.01em]'>拖拽视频到这里，或点击选择文件</p>
-            <p className='text-sm text-[#8C8C8C] mt-2'>支持 mp4 / mkv / mov / avi 等常见格式 · 视频在本地处理</p>
-          </div>
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.35, ease: EASE }}
+            className='upload-card p-10 md:p-12 text-center'
+          >
+            <motion.div
+              animate={{ y: [0, -6, 0] }}
+              transition={{ duration: 2.6, repeat: Infinity, ease: 'easeInOut' }}
+              className='w-16 h-16 mx-auto mb-5 rounded-[20px] bg-gradient-to-br from-[#B8A089] to-[#C9B49A] flex items-center justify-center text-white shadow-[0_10px_30px_rgba(184,160,137,0.35)]'
+            >
+              <LinkIcon size={28} />
+            </motion.div>
+            <p className='eyebrow mb-3'>Online Video</p>
+            <input
+              className='w-full max-w-xl mx-auto block px-4 py-3 rounded-[12px] bg-white/80 border border-[#E8E2D9] text-[14px] text-[#2C2C2C] placeholder-[#B8B2A8] outline-none focus:border-[#C4785A] focus:ring-2 focus:ring-[rgba(196,120,90,0.15)] transition-all duration-300'
+              placeholder='粘贴视频链接，如 http://cxauo.site:8889/view/…/039 5.1.3 树的性质.mp4'
+              value={url}
+              onChange={(e) => setUrl(e.target.value)}
+            />
+            <p className='text-sm text-[#8C8C8C] mt-4'>
+              支持服务器视频库链接（自动匹配本地文件，秒级开始）与任意 http(s) 视频直链（下载后分析）
+            </p>
+          </motion.div>
         )}
-      </motion.div>
+      </div>
 
       {/* 折叠参数 */}
       <div className='space-y-5'>
@@ -185,14 +255,14 @@ export default function UploadZone({ providers, onUploaded, onError }: Props) {
       <div className='flex justify-center pt-2'>
         <motion.button
           onClick={doUpload}
-          disabled={uploading || !file}
-          whileHover={file && !uploading ? { scale: 1.02 } : {}}
-          whileTap={file && !uploading ? { scale: 0.98 } : {}}
+          disabled={uploading || (mode === 'file' ? !file : !url.trim())}
+          whileHover={!uploading && (mode === 'file' ? !!file : !!url.trim()) ? { scale: 1.02 } : {}}
+          whileTap={!uploading && (mode === 'file' ? !!file : !!url.trim()) ? { scale: 0.98 } : {}}
           transition={{ duration: 0.3, ease: EASE }}
           className='btn-primary flex items-center gap-2 min-w-[220px] justify-center'
         >
           {uploading ? <span className='inline-block w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin' /> : <PlayIcon size={17} />}
-          {uploading ? '正在上传…' : '开始解析视频'}
+          {uploading ? '正在提交…' : mode === 'url' ? '开始解析链接视频' : '开始解析视频'}
         </motion.button>
       </div>
     </div>

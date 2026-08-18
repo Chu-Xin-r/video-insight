@@ -52,3 +52,7 @@ class LoginIn(BaseModel):
 
 class SettingsIn(BaseModel):
     settings: dict
+
+
+class AskIn(BaseModel):
+    question: str

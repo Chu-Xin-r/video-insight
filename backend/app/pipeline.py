@@ -145,3 +145,34 @@ def start_task(task_id: str, video_path: str, options: dict) -> threading.Thread
     t = threading.Thread(target=run_task, args=(task_id, video_path, options), daemon=True)
     t.start()
     return t
+
+
+def run_task_from_url(task_id: str, url: str, options: dict) -> None:
+    """URL 任务：解析视频（视频库匹配复制 / HTTP 下载）→ 完整流水线。"""
+    try:
+        task_dir = TASK_DIR / task_id
+        task_dir.mkdir(parents=True, exist_ok=True)
+        task_store.update_task(task_id, status="running", progress=3, stage="正在获取视频…")
+
+        def on_dl(ratio: float):
+            task_store.update_task(task_id, progress=int(3 + ratio * 7), stage="正在下载视频…")
+
+        from .video_source import prepare_video
+        ok, msg = prepare_video(url, UPLOAD_DIR / task_id, on_progress=on_dl)
+        if not ok:
+            task_store.update_task(task_id, status="failed", stage="失败", error=msg)
+            return
+        task_store.update_task(task_id, progress=10, stage=msg + "，开始分析…")
+        video = next(UPLOAD_DIR.glob(f"{task_id}.*"), None)
+        if not video:
+            task_store.update_task(task_id, status="failed", stage="失败", error="视频文件未生成")
+            return
+        run_task(task_id, str(video), options)
+    except Exception as e:
+        task_store.update_task(task_id, status="failed", stage="失败", error=f"{e}\n{traceback.format_exc()}")
+
+
+def start_task_from_url(task_id: str, url: str, options: dict) -> threading.Thread:
+    t = threading.Thread(target=run_task_from_url, args=(task_id, url, options), daemon=True)
+    t.start()
+    return t

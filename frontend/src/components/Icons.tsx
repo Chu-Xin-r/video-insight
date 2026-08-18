@@ -127,3 +127,10 @@ export const LockIcon = (p: IconProps) => (
     <circle cx="12" cy="15" r="1.3" />
   </svg>
 );
+
+export const LinkIcon = (p: IconProps) => (
+  <svg {...base(p)}>
+    <path d="M10 13.5a5 5 0 0 0 7.07 0l2.12-2.12a5 5 0 0 0-7.07-7.07L10.5 5.93" />
+    <path d="M14 10.5a5 5 0 0 0-7.07 0l-2.12 2.12a5 5 0 0 0 7.07 7.07l1.62-1.62" />
+  </svg>
+);

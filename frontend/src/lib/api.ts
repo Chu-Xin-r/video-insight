@@ -97,12 +97,14 @@ export const api = {
       method: 'PUT', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ settings }),
     }),
-  upload: (file: File, opts: {
+  upload: (file: File | null, opts: {
     model_size: string; video_understanding: boolean; provider_id: string;
     vision_provider_id: string; summary_style: string;
+    video_url?: string;
   }) => {
     const fd = new FormData();
-    fd.append('file', file);
+    if (file) fd.append('file', file);
+    if (opts.video_url) fd.append('video_url', opts.video_url);
     fd.append('model_size', opts.model_size);
     fd.append('video_understanding', String(opts.video_understanding));
     fd.append('provider_id', opts.provider_id);
@@ -118,6 +120,16 @@ export const api = {
     req<Provider>('/api/providers', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(p) }),
   deleteProvider: (id: string) => req<{ ok: boolean }>(`/api/providers/${id}`, { method: 'DELETE' }),
   testProvider: (id: string) => req<{ ok: boolean; reply: string }>(`/api/providers/${id}/test`, { method: 'POST' }),
+  retry: (id: string) => req<{ ok: boolean }>(`/api/tasks/${id}/retry`, { method: 'POST' }),
+  ask: (id: string, question: string) =>
+    req<{ answer: string; refs: { time: number; text: string }[] }>(`/api/tasks/${id}/ask`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ question }),
+    }),
+  videoUrl: (taskId: string) => {
+    const tk = getToken();
+    return `${BASE}/api/tasks/${taskId}/video${tk ? '?token=' + encodeURIComponent(tk) : ''}`;
+  },
   taskFile: (taskId: string, name: string) => {
     const tk = getToken();
     return `${BASE}/api/task_files/${taskId}/${name}${tk ? '?token=' + encodeURIComponent(tk) : ''}`;

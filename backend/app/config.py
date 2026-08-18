@@ -118,3 +118,8 @@ def resolve_provider(pid: str) -> dict[str, Any] | None:
             p["api_key"] = _dsh_key(env)
         return p
     return None
+
+# 在线视频库根目录（粘贴 cxauo.site:8889 这类库链接时按文件名匹配本地视频）
+# 支持多个目录用分号分隔；可通过环境变量 VIDEO_LIBRARY_ROOTS 覆盖
+import os as _os
+VIDEO_LIBRARY_ROOTS = [p for p in (_os.environ.get("VIDEO_LIBRARY_ROOTS") or r"D:\考研").split(";") if p.strip()]

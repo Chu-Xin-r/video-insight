@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { api, Task, fmtTime } from '../lib/api';
 import { DocIcon, ImageIcon, ClockIcon, SparkleIcon, ChevronDownIcon, CloseIcon, LayersIcon } from '../components/Icons';
@@ -12,6 +12,11 @@ export default function TaskDetail({ taskId, onBack }: Props) {
   const [showTranscript, setShowTranscript] = useState(false);
   const [imgErr, setImgErr] = useState<Record<number, boolean>>({});
   const [lightbox, setLightbox] = useState<number | null>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const [askQ, setAskQ] = useState('');
+  const [askRes, setAskRes] = useState<{ answer: string; refs: { time: number; text: string }[] } | null>(null);
+  const [asking, setAsking] = useState(false);
+  const [retrying, setRetrying] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -28,6 +33,34 @@ export default function TaskDetail({ taskId, onBack }: Props) {
     window.addEventListener('keydown', onKey);
     return () => { alive = false; window.removeEventListener('keydown', onKey); };
   }, [taskId]);
+
+  const seekTo = (t: number) => {
+    const v = videoRef.current;
+    if (v) { v.currentTime = Math.max(0, t); v.play().catch(() => {}); }
+  };
+
+  const doRetry = async () => {
+    if (!window.confirm('重新分析该视频？将复用已下载的视频重新跑一遍。')) return;
+    setRetrying(true);
+    try {
+      const t = await api.retry(taskId);
+      setTask(t);
+    } catch (e) {
+      alert((e as Error).message);
+    } finally { setRetrying(false); }
+  };
+
+  const doAsk = async () => {
+    if (!askQ.trim()) return;
+    setAsking(true);
+    setAskRes(null);
+    try {
+      const r = await api.ask(taskId, askQ.trim());
+      setAskRes(r);
+    } catch (e) {
+      alert((e as Error).message);
+    } finally { setAsking(false); }
+  };
 
   if (!task) {
     return (
@@ -93,6 +126,14 @@ export default function TaskDetail({ taskId, onBack }: Props) {
           <CloseIcon size={30} className='text-[#A85B4E] mx-auto mb-3' />
           <p className='font-medium text-[#2C2C2C]'>分析失败</p>
           <p className='text-sm text-[#A85B4E] mt-2 break-all'>{task.error}</p>
+          <button
+            onClick={doRetry}
+            disabled={retrying}
+            className='btn-primary mt-6 inline-flex items-center gap-2 disabled:opacity-60'
+          >
+            {retrying ? <span className='inline-block w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin' /> : <PlayIcon size={16} />}
+            {retrying ? '正在重新分析…' : '重新分析（复用已下载视频）'}
+          </button>
         </div>
       )}
 
@@ -103,6 +144,11 @@ export default function TaskDetail({ taskId, onBack }: Props) {
           transition={{ duration: 0.5, ease: EASE }}
           className='space-y-6'
         >
+          {/* 视频播放器 */}
+          <div className='card p-4 md:p-6'>
+            <video ref={videoRef} src={api.videoUrl(taskId)} controls preload='metadata' className='w-full max-h-[56vh] rounded-[12px] bg-black' />
+            <p className='text-[12px] text-[#B8B2A8] mt-3 text-center'>点击章节、关键帧或文字稿的时间戳，可跳转播放对应位置</p>
+          </div>
           {/* 摘要 */}
           <div className='card p-8'>
             <div className='flex items-start justify-between gap-4 flex-wrap'>
@@ -132,6 +178,51 @@ export default function TaskDetail({ taskId, onBack }: Props) {
             )}
           </div>
 
+          {/* AI 问答 */}
+          {r.text && (
+            <div className='card p-8'>
+              <p className='eyebrow mb-3'>Ask AI</p>
+              <h3 className='h-section text-[#2C2C2C] mb-5 flex items-center gap-2'>
+                <SparkleIcon size={19} className='text-[#C4785A]' /> 向本视频提问
+              </h3>
+              <div className='flex gap-2.5'>
+                <input
+                  value={askQ}
+                  onChange={(e) => setAskQ(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') doAsk(); }}
+                  placeholder='如：这个视频的重点结论是什么？n0=n2+1 为什么成立？'
+                  className='flex-1 px-4 py-3 rounded-[12px] bg-white/80 border border-[#E8E2D9] text-[14px] text-[#2C2C2C] placeholder-[#B8B2A8] outline-none focus:border-[#C4785A] focus:ring-2 focus:ring-[rgba(196,120,90,0.15)] transition-all duration-300'
+                />
+                <motion.button
+                  onClick={doAsk}
+                  disabled={asking || !askQ.trim()}
+                  whileTap={{ scale: 0.97 }}
+                  transition={{ duration: 0.2, ease: EASE }}
+                  className='btn-primary !px-6 disabled:opacity-50 shrink-0'
+                >
+                  {asking ? <span className='inline-block w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin' /> : '提问'}
+                </motion.button>
+              </div>
+              {askRes && (
+                <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, ease: EASE }} className='mt-5'>
+                  <p className='text-[14.5px] leading-relaxed text-[#3D3D3D] whitespace-pre-wrap'>{askRes.answer}</p>
+                  {askRes.refs.length > 0 && (
+                    <div className='mt-4 flex flex-wrap gap-2'>
+                      {askRes.refs.map((rf, i) => (
+                        <button
+                          key={i}
+                          onClick={() => seekTo(rf.time)}
+                          title={rf.text}
+                          className='badge-oat cursor-pointer hover:!bg-[#C4785A] hover:!text-white transition-all duration-300'
+                        ><ClockIcon size={11} /> {fmtTime(rf.time)}</button>
+                      ))}
+                    </div>
+                  )}
+                </motion.div>
+              )}
+            </div>
+          )}
+
           {/* 章节 */}
           {r.summary.chapters && r.summary.chapters.length > 0 && (
             <div className='card p-8'>
@@ -146,12 +237,12 @@ export default function TaskDetail({ taskId, onBack }: Props) {
                     initial={{ opacity: 0, x: 14 }}
                     animate={{ opacity: 1, x: 0 }}
                     transition={{ duration: 0.45, ease: EASE, delay: i * 0.06 }}
-                    className='relative'
+                    className='relative group cursor-pointer'
                   >
                     <span className='absolute -left-[29px] top-1 chapter-dot' />
                     <div className='flex flex-wrap items-center gap-2.5 mb-1.5'>
                       <span className='font-medium text-[#2C2C2C]'>{c.title}</span>
-                      <span className='badge-oat'>{fmtTime(c.start)}</span>
+                      <button onClick={() => seekTo(c.start)} className='badge-oat cursor-pointer hover:!bg-[#C4785A] hover:!text-white transition-all duration-300'>{fmtTime(c.start)}</button>
                     </div>
                     {c.points && c.points.length > 0 && (
                       <ul className='space-y-1.5 text-sm text-[#3D3D3D]'>
@@ -192,7 +283,7 @@ export default function TaskDetail({ taskId, onBack }: Props) {
                       <div className='w-full aspect-video flex items-center justify-center text-[#C8B8A8]'><ImageIcon size={26} /></div>
                     )}
                     <figcaption className='p-4'>
-                      <span className='badge-oat'><ClockIcon size={11} /> {fmtTime(f.time)}</span>
+                      <button onClick={() => seekTo(f.time)} className='badge-oat cursor-pointer hover:!bg-[#C4785A] hover:!text-white transition-all duration-300'><ClockIcon size={11} /> {fmtTime(f.time)}</button>
                       <p className='text-[13.5px] text-[#3D3D3D] mt-2.5 leading-relaxed'>{f.context || f.description}</p>
                     </figcaption>
                   </motion.figure>
@@ -227,7 +318,7 @@ export default function TaskDetail({ taskId, onBack }: Props) {
                     <div className='px-8 pb-8 space-y-2 max-h-[480px] overflow-y-auto'>
                       {r.segments && r.segments.map((s, i) => (
                         <div key={i} className='flex gap-3 text-sm'>
-                          <span className='text-[#C4785A]/70 text-xs mt-0.5 shrink-0'>{fmtTime(s.start)}</span>
+                          <button onClick={() => seekTo(s.start)} className='text-[#C4785A]/70 text-xs mt-0.5 shrink-0 cursor-pointer hover:text-[#C4785A]'>{fmtTime(s.start)}</button>
                           <span className='text-[#3D3D3D]/85'>{s.text}</span>
                         </div>
                       ))}
